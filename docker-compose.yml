@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: fincomerce-qdrant
+    ports:
+      - "6333:6333"      # REST API
+      - "6334:6334"      # gRPC API
+    environment:
+      QDRANT_API_KEY: ""  # Optional: set for production
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - fincomerce
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fincomerce-api
+    ports:
+      - "8000:8000"
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      LOG_LEVEL: INFO
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - fincomerce
+    restart: unless-stopped
+
+  # Streamlit UI (optional)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: fincomerce-ui
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    networks:
+      - fincomerce
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+    driver: local
+
+networks:
+  fincomerce:
+    driver: bridge
