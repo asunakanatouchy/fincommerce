@@ -266,3 +266,78 @@ def test_search_timing_measurement(client, mock_search_dependencies):
     assert 'execution_time_ms' in data
     assert data['execution_time_ms'] > 0
     assert data['execution_time_ms'] < 10000  # Should be under 10 seconds
+
+
+def test_feedback_endpoint(client):
+    """Test feedback endpoint stores user actions."""
+    payload = {
+        "user_id": "testuser",
+        "action": "click",
+        "product_id": "1",
+        "query": "laptop for development",
+        "budget": 1500.0,
+        "timestamp": 1700000000.0,
+        "extra": {"note": "test feedback"}
+    }
+    response = client.post("/feedback", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "Feedback received" in data["message"]
+
+
+def test_search_alternatives_field(client, mock_search_dependencies):
+    """Test alternatives are present in search response when no results fit constraints."""
+    # Make vector_db return empty for main search, non-empty for alternatives
+    mock_search_dependencies['db'].search.side_effect = [[], [Mock(payload={
+        'product_id': 2,
+        'title': 'Alternative Laptop',
+        'description': 'Slightly over budget',
+        'price': 1800.0,
+        'category': 'Electronics',
+        'brand': 'AltBrand',
+        'rating': 4.0,
+        'semantic_score': 0.8,
+        'composite_score': 0.75,
+        'explanation': 'Alternative suggestion',
+        'installment_available': True,
+        'max_installments': 10,
+        'shipping_days': 5,
+        'budget_band': 'premium',
+        'msrp': 2000.0,
+        'discount_pct': 10.0
+    })]]
+    mock_search_dependencies['ranker'].rank.side_effect = [[], [{
+        'product_id': 2,
+        'title': 'Alternative Laptop',
+        'description': 'Slightly over budget',
+        'price': 1800.0,
+        'category': 'Electronics',
+        'brand': 'AltBrand',
+        'rating': 4.0,
+        'semantic_score': 0.8,
+        'composite_score': 0.75,
+        'explanation': 'Alternative suggestion',
+        'installment_available': True,
+        'max_installments': 10,
+        'shipping_days': 5,
+        'budget_band': 'premium',
+        'msrp': 2000.0,
+        'discount_pct': 10.0
+    }]]
+    payload = {
+        "query": "nonexistent product xyz123",
+        "budget": 1500.0,
+        "top_k": 5
+    }
+    response = client.post("/search", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['total_results'] == 0
+    assert 'alternatives' in data
+    assert isinstance(data['alternatives'], list)
+    assert len(data['alternatives']) > 0
+    alt = data['alternatives'][0]
+    assert alt['title'] == 'Alternative Laptop'
+    assert alt['price'] == 1800.0
+    assert 'explanation' in alt

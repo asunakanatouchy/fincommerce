@@ -39,43 +39,35 @@ class EmbeddingService:
     
     def embed(self, text: Union[str, List[str]], 
               normalize: bool = True) -> Union[List[float], List[List[float]]]:
-        """Generate embeddings for text input.
-        
+        """Generate embeddings for text input. Normalizes and lowercases input for consistency.
         Args:
             text: Single text string or list of texts
             normalize: Whether to L2-normalize the embeddings
-            
         Returns:
             List of floats (single text) or list of lists (multiple texts)
-            
         Raises:
             ValueError: If text is empty or invalid
         """
         if not text:
+            logger.warning("Text input cannot be empty for embedding.")
             raise ValueError("Text input cannot be empty")
-        
         try:
             is_single = isinstance(text, str)
             texts = [text] if is_single else text
-            
-            # Filter out empty strings
-            valid_texts = [t.strip() for t in texts if t and t.strip()]
+            # Normalize and lowercase all input
+            valid_texts = [t.strip().lower() for t in texts if t and t.strip()]
             if not valid_texts:
+                logger.warning("No valid text after filtering empty strings for embedding.")
                 raise ValueError("No valid text after filtering empty strings")
-            
-            # Generate embeddings
+            logger.info(f"Embedding {len(valid_texts)} text(s): {valid_texts[:1]}{'...' if len(valid_texts) > 1 else ''}")
             embeddings = self.model.encode(
                 valid_texts,
                 normalize_embeddings=normalize,
                 show_progress_bar=False
             )
-            
-            # Convert to list format
             if isinstance(embeddings, np.ndarray):
                 embeddings = embeddings.tolist()
-            
             return embeddings[0] if is_single else embeddings
-            
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
             raise

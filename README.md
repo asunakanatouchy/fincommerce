@@ -1,110 +1,40 @@
-# FinCommerce - Semantic Product Search with Budget Awareness
 
-Context-aware e-commerce search engine powered by Qdrant vector database and semantic embeddings.
+# 🛍️ FinCommerce: Context-Aware Product Discovery & Recommendations
 
-## 🚀 Features
+Smart, explainable, and financially sensitive product search for e-commerce. Built for Hackathon Use Case 2.
 
-- **Semantic Search**: Natural language product discovery using sentence transformers
-- **Budget-Aware Filtering**: Constraint-based recommendations that respect user budgets
-- **Composite Ranking**: Multi-factor scoring (semantic similarity + budget fit + price advantage)
-- **Explainable Results**: Clear explanations for why each product is recommended
-- **Production-Ready**: FastAPI backend with proper logging, error handling, and Docker support
 
-## 📋 Use Case
+---
 
-**Context-Aware FinCommerce Engine** - Smart product discovery with financial constraints.
+## 🚀 Quick Start
 
-Instead of keyword matching, the system understands:
-- "laptop for development" → finds dev-friendly laptops
-- "cheap but reliable" → balances price and quality
-- "gift under €500" → respects budget constraints
-
-## 🏗️ Architecture
-
-```
-fincomerce/
-├── api/                    # FastAPI application
-│   ├── main.py            # API endpoints
-│   └── schemas/           # Pydantic models
-├── config/                # Configuration files
-│   ├── settings.yaml      # Main configuration
-│   └── .env.example       # Environment variables
-├── src/
-│   ├── core/              # Core configuration
-│   ├── retrieval/         # Embedding & vector search
-│   │   ├── embedder.py    # SentenceTransformers service
-│   │   └── search_engine.py  # Qdrant integration
-│   ├── processing/        # Ranking & explanations
-│   │   └── ranker.py      # Composite scoring
-│   ├── ingestion/         # Data loading
-│   └── utils/             # Utilities
-├── ui/                    # Streamlit interface
-├── tests/                 # Unit tests
-└── data/                  # Product catalog
-```
-
-## 🔧 Installation
-
-### Prerequisites
-- Python 3.10+
-- Docker & Docker Compose (recommended)
-
-### Quick Start with Docker
-
+### 1. Install Dependencies
 ```bash
-# Start all services (Qdrant + API + UI)
-docker-compose up -d
-
-# Check health
-curl http://localhost:8000/health
-
-# Access UI
-open http://localhost:8501
-```
-
-### Local Development
-
-```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# Install dependencies
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
-# Start Qdrant
+### 2. Start Qdrant Vector DB (Recommended)
+```bash
 docker-compose up qdrant -d
+```
 
-# Configure environment
-cp config/.env.example config/.env
+### 3. Run API Server
+```bash
+uvicorn api.main:app --reload
+```
 
-# Run API
-python api/main.py
-
-# Run UI (separate terminal)
+### 4. Run Streamlit UI (Optional)
+```bash
 streamlit run ui/streamlit_app.py
 ```
 
-## 📊 Product Data
+### 5. Access API Docs
+- [http://localhost:8000/docs](http://localhost:8000/docs)
 
-The system expects CSV with these columns:
-
-**Required:**
-- `id`, `title`, `description`, `price`, `category`, `brand`, `rating`
-
-**Financial Metadata (for constraints):**
-- `msrp`, `discount_pct`, `stock`, `availability`
-- `payment_methods`, `installment_available`, `max_installments`
-- `shipping_days`, `budget_band`, `tags`
-
-## 🔍 API Usage
-
-### Search Products
-
-```bash
-POST /search
-Content-Type: application/json
-
+### 6. Example Search Request
+```json
 {
   "query": "laptop for development",
   "budget": 1500.0,
@@ -113,66 +43,107 @@ Content-Type: application/json
 }
 ```
 
-**Response:**
+### 7. Feedback Endpoint (Learning Loop)
 ```json
+POST /feedback
 {
+  "user_id": "user123",
+  "action": "click",
+  "product_id": "1",
   "query": "laptop for development",
   "budget": 1500.0,
-  "total_results": 5,
-  "results": [
-    {
-      "title": "Dev Laptop 14",
-      "price": 1199.0,
-      "semantic_score": 0.8542,
-      "composite_score": 0.7913,
-      "explanation": "Matches your intent (85.4%) and is €301 under budget."
-    }
-  ],
-  "execution_time_ms": 45.2
+  "timestamp": 1700000000.0,
+  "extra": {}
 }
 ```
 
-## 📈 Ranking Algorithm
+### 8. Alternatives Suggestion
+- If no products fit the budget, the API returns an `alternatives` field with close matches (e.g., slightly over budget).
+
+### 9. Explainable Recommendations
+- Each product result includes an `explanation` field describing why it was recommended.
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+fincommerce/
+├── api/                # FastAPI app & endpoints
+│   ├── main.py         # API logic
+│   └── schemas/        # Pydantic models
+├── config/             # YAML & env config
+├── src/
+│   ├── core/           # Config loader
+│   ├── retrieval/      # Embedding & vector search
+│   ├── processing/     # Ranking & explanations
+│   ├── ingestion/      # Data loading
+│   └── utils/          # Utilities
+├── ui/                 # Streamlit UI
+├── tests/              # Pytest suite
+└── data/               # Product catalog CSV
+```
+
+**Key Flow:**
+1. User submits search (query, budget, etc.)
+2. Query embedded (SentenceTransformers)
+3. Vector search (Qdrant)
+4. Results filtered/ranked by financial context
+5. Explanations generated for each result
+6. Alternatives suggested if needed
+7. Feedback loop collects user actions
+
+---
+
+## 🧠 Features & Capabilities
+
+- **Discovery for vague intents**: Semantic search for queries like "laptop for dev", "gift", "cheap but reliable".
+- **Constraint-aware recommendations**: Budget, payment, and delivery constraints respected.
+- **Explainable ranking**: Every result includes a clear, actionable explanation.
+- **Alternatives generation**: If nothing fits, close substitutes are suggested and explained.
+- **Feedback loop**: User actions (clicks, add-to-cart, etc.) collected for future learning.
+- **Success indicators**: Engagement metrics tracked in UI (clicks, viewed products).
+- **Sensitive data**: Only minimal, anonymized feedback stored (in-memory for demo).
+- **Diversity**: No over-personalization; results remain broad and exploratory.
+
+---
+
+## 📊 Ranking Algorithm
 
 **Composite Score Formula:**
 ```
 Score = (0.6 × semantic) + (0.3 × budget_fit) + (0.1 × price_advantage)
 ```
-
 Where:
 - **semantic**: Cosine similarity from vector search (0-1)
 - **budget_fit**: 1.0 if within budget, 0.5 if over
 - **price_advantage**: (budget - price) / budget (savings ratio)
 
-## 🧩 Chunking Strategy
+---
 
-**Current:** Disabled (products have short descriptions ~100 chars)
+## 🧩 Data & Constraints
 
-**When to Enable:**
-- Product descriptions > 512 tokens
-- Integration of user reviews (aggregated long-form text)
-- Multi-language catalogs requiring cross-lingual embeddings
+**Product CSV Columns:**
+- Required: `id`, `title`, `description`, `price`, `category`, `brand`, `rating`
+- Financial: `msrp`, `discount_pct`, `stock`, `availability`, `payment_methods`, `installment_available`, `max_installments`, `shipping_days`, `budget_band`, `tags`
 
-**Configuration** (`config/settings.yaml`):
-```yaml
-chunking:
-  enabled: true
-  chunk_size: 256
-  chunk_overlap: 50
-  strategy: "sentence"
-```
-
-**Implementation Approaches:**
-
-1. **Sentence-Based Chunking** (Recommended for product descriptions)
-2. **Fixed-Size Chunking** (For uniform review text)
-3. **Semantic Chunking** (For long reviews or multi-attribute products)
+---
 
 ## 🧪 Testing
 
+Run all tests (including feedback & alternatives):
 ```bash
 pytest --cov=src --cov-report=html
 ```
+
+---
+
+## 🖥️ UI (Streamlit)
+
+- Run: `streamlit run ui/streamlit_app.py`
+- Features: Search, budget slider, category filter, alternatives, engagement metrics
+
+---
 
 ## 📄 License
 
@@ -181,3 +152,4 @@ MIT License
 ---
 
 **Built with ❤️ for smarter e-commerce search**
+

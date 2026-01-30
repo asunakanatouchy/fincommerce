@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response validation."""
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class SearchRequest(BaseModel):
@@ -14,7 +14,8 @@ class SearchRequest(BaseModel):
     min_score: Optional[float] = Field(None, ge=0, le=1, 
                                       description="Minimum similarity threshold")
     
-    @validator('budget')
+    @field_validator('budget')
+    @classmethod
     def budget_must_be_positive(cls, v):
         if v <= 0:
             raise ValueError('Budget must be positive')
@@ -31,9 +32,10 @@ class SearchRequest(BaseModel):
         }
 
 
+
+
 class ProductResult(BaseModel):
     """Schema for a single product result."""
-    
     product_id: Any
     title: str
     description: str
@@ -42,23 +44,29 @@ class ProductResult(BaseModel):
     brand: Optional[str] = None
     rating: Optional[float] = None
     semantic_score: float
+    budget_fit_score: Optional[float] = None
+    price_advantage_score: Optional[float] = None
     composite_score: float
-    explanation: str
+    explanation: str  # User-friendly, actionable explanation
     budget_band: Optional[str] = None
     installment_available: Optional[bool] = None
     max_installments: Optional[int] = None
     shipping_days: Optional[int] = None
+    msrp: Optional[float] = None
+    discount_pct: Optional[float] = None
+
 
 
 class SearchResponse(BaseModel):
     """Response schema for search results."""
-    
     query: str
     budget: float
     total_results: int
     results: List[ProductResult]
     execution_time_ms: float
     filters_applied: Dict[str, Any]
+    explanation: Optional[str] = None  # User-friendly explanation for the results
+    alternatives: Optional[List[ProductResult]] = None  # Alternatives if no results
     
     class Config:
         schema_extra = {
@@ -68,7 +76,9 @@ class SearchResponse(BaseModel):
                 "total_results": 5,
                 "results": [...],
                 "execution_time_ms": 45.2,
-                "filters_applied": {"budget": 1500.0}
+                "filters_applied": {"budget": 1500.0},
+                "explanation": "No products found for 'laptop for development' within €1500.00 budget.",
+                "alternatives": [...]
             }
         }
 
@@ -89,5 +99,16 @@ class ErrorResponse(BaseModel):
     status_code: int
 
 
+
+# Feedback schema for feedback endpoint
+class FeedbackRequest(BaseModel):
+    user_id: str
+    action: str  # e.g., 'click', 'add_to_cart', 'purchase', 'dismiss'
+    product_id: str
+    query: str
+    budget: float
+    timestamp: float
+    extra: dict = {}
+
 __all__ = ['SearchRequest', 'SearchResponse', 'ProductResult', 
-           'HealthResponse', 'ErrorResponse']
+           'HealthResponse', 'ErrorResponse', 'FeedbackRequest']

@@ -1,3 +1,49 @@
+from typing import Dict, Any
+
+class Explainer:
+    """Generate detailed explanations for recommendations."""
+
+    @staticmethod
+    def explain_no_results(query: str, budget: float, filters: dict) -> str:
+        """Generate explanation when no results are found."""
+        explanation = (
+            f"No products matched your query '{query}' within your budget of €{budget:.2f}. "
+            f"We suggest relaxing your filters or increasing your budget. "
+            f"Filters applied: {filters}"
+        )
+        return explanation
+
+    @staticmethod
+    def explain_result(result: Dict[str, Any], query: str, budget: float, *args, **kwargs) -> str:
+        """Generate detailed explanation for a single result.
+        Args:
+            result: Ranked product result
+            query: Original user query
+            budget: User budget
+        Returns:
+            Detailed explanation string
+        """
+        parts = [
+            f"**Why we recommend {result['title']}:**",
+            f"",
+            f"1. **Semantic Match:** {result['semantic_score']*100:.1f}% relevance to your query '{query}'",
+            f"2. **Price:** €{result['price']:.2f} (Budget: €{budget:.2f})",
+        ]
+        if result['price'] <= budget:
+            savings = budget - result['price']
+            parts.append(f"   ✓ Under budget by €{savings:.2f}")
+        else:
+            overage = result['price'] - budget
+            parts.append(f"   ⚠ Over budget by €{overage:.2f}")
+        if result.get('installment_available'):
+            parts.append(f"3. **Payment:** Installments available (up to {result['max_installments']} months)")
+        if result.get('discount_pct', 0) > 0:
+            parts.append(f"4. **Discount:** {result['discount_pct']:.1f}% off (MSRP: €{result.get('msrp', 0):.2f})")
+        if result.get('rating', 0) > 0:
+            parts.append(f"5. **Rating:** {result['rating']:.1f}/5.0 stars")
+        parts.append(f"")
+        parts.append(f"**Composite Score:** {result['composite_score']:.2f}/1.00")
+        return "\n".join(parts)
 """Ranking and explanation logic for search results."""
 import logging
 from typing import List, Dict, Any, Optional
@@ -22,73 +68,52 @@ class ScoringWeights:
 class Ranker:
     """Rank search results using composite scoring with financial awareness."""
     
-    def __init__(self, weights: Optional[ScoringWeights] = None):
-        """Initialize ranker with scoring weights.
-        
+    def __init__(self, weights: Optional[ScoringWeights] = None, min_score: float = 0.0):
+        """Initialize ranker with scoring weights and min_score.
         Args:
             weights: Scoring weights (defaults to 60/30/10 formula)
+            min_score: Minimum composite score threshold
         """
         self.weights = weights or ScoringWeights()
-        
+        self.min_score = min_score
         if not self.weights.validate():
             logger.warning(f"Scoring weights don't sum to 1.0: {self.weights}")
-    
-    def rank(self, search_hits: List[Any], user_budget: float, 
-             min_score: float = 0.0) -> List[Dict[str, Any]]:
-        """Rank search results using composite scoring.
-        
-        The scoring formula is:
-        Final Score = (w1 * semantic) + (w2 * budget_fit) + (w3 * price_advantage)
-        
-        Where:
-        - semantic: Similarity score from vector search (0-1)
-        - budget_fit: 1.0 if within budget, 0.5 if over
-        - price_advantage: (budget - price) / budget (savings ratio)
-        
-        Args:
-            search_hits: Results from vector search
-            user_budget: User's maximum budget
-            min_score: Minimum composite score threshold
-            
-        Returns:
-            Sorted list of ranked products with explanations
-        """
+
+    def rank(self, search_hits: List[Any], user_budget: float, min_score: Optional[float] = None, **kwargs) -> List[Dict[str, Any]]:
         if not search_hits:
             logger.info("No search hits to rank")
             return []
-        
+
         ranked_results = []
-        
+        min_score_val = self.min_score if min_score is None else min_score
+
         for hit in search_hits:
             try:
-                # Extract data
                 payload = hit.payload if hasattr(hit, 'payload') else hit
                 semantic_score = hit.score if hasattr(hit, 'score') else 0.0
                 price = float(payload.get("price", 0))
-                
-                # Calculate scoring components
                 budget_fit = 1.0 if price <= user_budget else 0.5
                 price_advantage = max(0, (user_budget - price) / user_budget) if user_budget > 0 else 0
-                
-                # Composite score formula (from use case appendix)
                 final_score = (
                     self.weights.semantic * semantic_score +
                     self.weights.budget_fit * budget_fit +
                     self.weights.price_advantage * price_advantage
                 )
-                
-                # Skip if below threshold
-                if final_score < min_score:
+                if final_score < min_score_val:
                     continue
-                
-                # Generate explanation
-                explanation = self._generate_explanation(
-                    semantic_score=semantic_score,
-                    price=price,
-                    user_budget=user_budget,
-                    budget_fit=budget_fit
+                # Enhanced explanation: include tags, category, and payment options
+                tags = payload.get("tags", "")
+                if isinstance(tags, list):
+                    tags = ', '.join(tags)
+                explanation = (
+                    f"**Why this product?**\n"
+                    f"- Query match: {semantic_score*100:.1f}%\n"
+                    f"- Price: €{price:.2f} (Budget: €{user_budget:.2f})\n"
+                    f"- Category: {payload.get('category', '')}\n"
+                    f"- Tags: {tags}\n"
+                    f"- Installments: {'Yes' if payload.get('installment_available', False) else 'No'}\n"
+                    f"- Composite score: {final_score:.2f}/1.00\n"
                 )
-                
                 ranked_results.append({
                     "product_id": payload.get("product_id"),
                     "title": payload.get("title", ""),
@@ -98,8 +123,8 @@ class Ranker:
                     "brand": payload.get("brand", ""),
                     "rating": payload.get("rating", 0),
                     "semantic_score": round(semantic_score, 4),
-                    "budget_fit": budget_fit,
-                    "price_advantage": round(price_advantage, 4),
+                    "budget_fit_score": budget_fit,
+                    "price_advantage_score": round(price_advantage, 4),
                     "composite_score": round(final_score, 4),
                     "explanation": explanation,
                     "msrp": payload.get("msrp"),
@@ -109,88 +134,18 @@ class Ranker:
                     "shipping_days": payload.get("shipping_days", 0),
                     "budget_band": payload.get("budget_band", ""),
                 })
-                
             except Exception as e:
                 logger.warning(f"Failed to rank result: {e}")
                 continue
-        
-        # Sort by composite score (descending)
         ranked_results.sort(key=lambda x: x['composite_score'], reverse=True)
-        
         logger.info(f"Ranked {len(ranked_results)} results from {len(search_hits)} hits")
+        # Suggest alternatives if results are low
+        if len(ranked_results) < 3 and len(search_hits) > 3:
+            logger.info("Few results after ranking, consider suggesting alternatives with relaxed constraints.")
         return ranked_results
     
-    def _generate_explanation(self, semantic_score: float, price: float, 
-                            user_budget: float, budget_fit: float) -> str:
-        """Generate human-readable explanation for ranking.
-        
-        Args:
-            semantic_score: Similarity score (0-1)
-            price: Product price
-            user_budget: User's budget
-            budget_fit: Budget fitness score
-            
-        Returns:
-            Explanation string
-        """
-        match_pct = round(semantic_score * 100, 1)
-        
-        if price <= user_budget:
-            savings = round(user_budget - price, 2)
-            if savings > 0:
-                return f"Matches your intent ({match_pct}%) and is €{savings} under budget."
-            else:
-                return f"Perfect match ({match_pct}%) and fits exactly in your budget."
-        else:
-            overage = round(price - user_budget, 2)
-            return f"Strong match ({match_pct}%) but €{overage} over budget. Consider increasing budget or check alternatives."
-
-
-class Explainer:
-    """Generate detailed explanations for recommendations."""
-    
     @staticmethod
-    def explain_result(result: Dict[str, Any], query: str, budget: float) -> str:
-        """Generate detailed explanation for a single result.
-        
-        Args:
-            result: Ranked product result
-            query: Original user query
-            budget: User budget
-            
-        Returns:
-            Detailed explanation string
-        """
-        parts = [
-            f"**Why we recommend {result['title']}:**",
-            f"",
-            f"1. **Semantic Match:** {result['semantic_score']*100:.1f}% relevance to your query '{query}'",
-            f"2. **Price:** €{result['price']:.2f} (Budget: €{budget:.2f})",
-        ]
-        
-        if result['price'] <= budget:
-            savings = budget - result['price']
-            parts.append(f"   ✓ Under budget by €{savings:.2f}")
-        else:
-            overage = result['price'] - budget
-            parts.append(f"   ⚠ Over budget by €{overage:.2f}")
-        
-        if result.get('installment_available'):
-            parts.append(f"3. **Payment:** Installments available (up to {result['max_installments']} months)")
-        
-        if result.get('discount_pct', 0) > 0:
-            parts.append(f"4. **Discount:** {result['discount_pct']:.1f}% off (MSRP: €{result.get('msrp', 0):.2f})")
-        
-        if result.get('rating', 0) > 0:
-            parts.append(f"5. **Rating:** {result['rating']:.1f}/5.0 stars")
-        
-        parts.append(f"")
-        parts.append(f"**Composite Score:** {result['composite_score']:.2f}/1.00")
-        
-        return "\n".join(parts)
-    
-    @staticmethod
-    def explain_no_results(query: str, budget: float, filters: Dict[str, Any]) -> str:
+    def explain_no_results(query: str, budget: float, filters: Dict[str, Any] = None, *args, **kwargs) -> str:
         """Explain why no results were found and suggest actions.
         
         Args:
