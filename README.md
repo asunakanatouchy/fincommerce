@@ -194,16 +194,6 @@ pytest --cov=src --cov-report=html
 
 ---
 
-## 👥 Team & Contact
-
-- Team: [Your Team Name]
-- Contact: [your.email@example.com]
-- GitHub: [repo link]
-
----
-
----
-
 ## 🖥️ UI (Streamlit)
 
 - Run: `streamlit run ui/streamlit_app.py`
