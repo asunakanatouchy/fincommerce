@@ -3,6 +3,62 @@
 
 Smart, explainable, and financially sensitive product search for e-commerce. Built for Hackathon Use Case 2.
 
+---
+
+
+## 🌐 Platform Link
+- Not publicly deployed (local demo via FastAPI + Streamlit)
+
+---
+
+
+## 🛠️ Tech Stack
+
+- **Python:** 3.10
+- **FastAPI:** 0.110+
+- **Qdrant:** 1.7+ (Docker)
+- **SentenceTransformers:** 2.2+
+- **Streamlit:** 1.30+
+- **Pytest:** 7+
+- **Docker / Docker Compose:** latest
+
+---
+
+
+## 🗄️ Qdrant Integration (Detailed)
+
+- Each product is converted into a dense vector using SentenceTransformers.
+- Vectors are stored in a Qdrant collection with product metadata as payload.
+- Qdrant performs cosine similarity search to retrieve semantically relevant products.
+- Metadata filtering (price, category) is applied during search.
+- Results are post-processed by a custom ranking engine to incorporate budget fit and price advantage.
+- Qdrant enables fast, scalable semantic retrieval while keeping business logic outside the database.
+
+---
+
+## 🧱 Architecture Diagram
+
+```
+User (UI / API Client)
+  |
+  v
+FastAPI Backend
+  |
+  v
+SentenceTransformer Embeddings
+  |
+  v
+Qdrant Vector Database
+  |
+  v
+Ranking + Explanation Engine
+  |
+  v
+Results + Alternatives + Feedback
+```
+
+---
+
 
 ---
 
@@ -135,6 +191,16 @@ Run all tests (including feedback & alternatives):
 ```bash
 pytest --cov=src --cov-report=html
 ```
+
+---
+
+## 👥 Team & Contact
+
+- Team: [Your Team Name]
+- Contact: [your.email@example.com]
+- GitHub: [repo link]
+
+---
 
 ---
 
